@@ -1,130 +1,176 @@
 # CollimaScope
 
-**Assistente visual de colimação por câmera do celular** — App Flutter/Dart open source para auxiliar a colimação de telescópios Newtonianos e Dobsonianos usando apenas o seu smartphone.
+**Colimação de telescópios Newtonianos e Dobsonianos com a câmera do celular.**
 
-## O que é colimação?
+O CollimaScope transforma o celular em um ocular de colimação assistida:
+a câmera olha pelo focador e o app desenha, por cima do preview ao vivo,
+círculos de referência geometricamente perfeitos, mira central, marcadores
+de parafusos e grade — guiando um fluxo de 7 etapas que vai da calibração
+do preview até a validação em estrela. Tudo offline, sem conta, sem
+rastreamento e com uma única permissão: a câmera.
 
-Colimação é o alinhamento dos espelhos de um telescópio para ótimo desempenho óptico. Um telescópio desalinhado produz imagens distorcidas e perde qualidade visual.
+**[⬇️ Baixar o APK (Releases)](https://github.com/AmaroMiranda/collima_scope/releases)** —
+requer Android 7+ e câmera traseira.
 
-O **CollimaScope** torna esse processo mais fácil usando:
+## Recursos
 
-- 📱 A câmera do seu celular como sensor
-- 🎯 Círculos de referência perfeitos (nunca achatados)
-- 📐 Sobreposição visual com múltiplas guias
-- 📖 Guia passo a passo intuitivo
-- 💾 Histórico de sessões com antes/depois
-- 🌙 Modo vermelho para preservar a adaptação noturna
+- **Fluxo guiado em 7 etapas** — cada etapa traz objetivo, instrução e as
+  guias visuais adequadas já posicionadas; notas ópticas aparecem quando a
+  física do telescópio pede (ex.: offset aparente do secundário em
+  Newtonianos rápidos).
+- **Círculos que nunca achatam** — a regra central do app: guias principais
+  são círculos perfeitos definidos só por centro e raio. Não existe
+  largura/altura nem escala X/Y em nenhuma guia de referência.
+- **Editor de guias em painel compacto** — chips para selecionar qualquer
+  guia da etapa, sliders de raio/espessura/opacidade, 6 cores predefinidas,
+  travar/ocultar/centralizar/duplicar/excluir — sem cobrir o preview.
+- **Modo avançado** — quem já tem o adaptador calibrado pula direto para a
+  colimação; um seletor de etapas permite saltar para qualquer estágio a
+  qualquer momento.
+- **Perfis de equipamento** — telescópios (abertura, focal, focador 1,25"/2",
+  marca central, nº de parafusos, offset do secundário) e adaptadores de
+  celular ficam salvos para reuso entre sessões.
+- **Histórico com antes/depois** — cada sessão registra capturas por etapa;
+  a exportação grava a imagem com o overlay de guias desenhado por cima.
+- **Modo vermelho** — tema noturno em tons de vermelho para preservar a
+  adaptação da visão ao escuro no campo.
+- Interface escura, em português (pt-BR), Material Design 3.
 
-## Características principais
+## As 7 etapas
 
-### ✅ Implementadas (MVP)
+| # | Etapa | Objetivo |
+|---|---|---|
+| 1 | Calibração do preview | Confirmar que o preview não está deformado: um círculo de teste deve parecer redondo em pé e deitado |
+| 2 | Calibração do adaptador | Alinhar a câmera do celular com o eixo do focador e salvar o perfil do adaptador |
+| 3 | Centralizar no focador | Fazer o círculo-guia coincidir com a borda interna do tubo do focador |
+| 4 | Verificar secundário | Posicionar o secundário sob o focador, respeitando a geometria (offset aparente é normal em alguns Newtonianos) |
+| 5 | Alinhar secundário → primário | Ajustar o secundário até o primário inteiro aparecer no círculo, com a marca central sobre a mira |
+| 6 | Ajustar primário | Colimar o primário até o reflexo da marca central coincidir com a mira, com anéis concêntricos e marcadores dos parafusos como referência |
+| 7 | Validação em estrela | Star test: estrela brilhante centralizada e desfocada deve mostrar anéis simétricos |
 
-- **Suporte a Newtonianos e Dobsonianos** com perfis customizáveis
-- **Viewport sem distorção** — proporção 1:1 mantida em qualquer orientação
-- **Editor visual intuitivo** com seleção de qualquer guia da sessão
-- **Guia educativo correto** em 7 etapas com aviso sobre offset do secundário
-- **Histórico persistente** com capturas antes/depois e exportação
-- **Modo vermelho** para preservar adaptação ao escuro
-- **Modo avançado** para usuários experientes pularem calibração
+O app é um assistente visual — ele não emite instruções ópticas do tipo
+"gire o parafuso X em Y graus". A precisão final vem do preview sem
+distorção, dos círculos de referência e do alinhamento físico do celular
+ao focador.
 
-### 🚀 Planejado (V2+)
+## Como funciona
 
-- Detecção automática de círculos com OpenCV
-- Análise de desalinhamento assistida
-- Suporte a SCT, RC e refratores
+| Peça | Onde | O que faz |
+|---|---|---|
+| `ViewportTransform` | `core/viewport/` | mapeia coordenadas entre sensor → preview → widget com **escala sempre uniforme** (mesmo fator em X e Y), tanto em `cover` quanto em `contain` — é isso que garante círculo perfeito em qualquer orientação e resolução |
+| `Point2D` | `core/geometry/` | coordenadas normalizadas (0.0–1.0) independentes de pixels; raios são fração do menor lado visível |
+| Guias | `features/collimation/domain/` | hierarquia `sealed` — `CircleGuide`, `CrosshairGuide`, `GridGuide`, `ScrewMarkerGuide`, `SpiderGuide` — serializada em JSON por etapa |
+| `GuidePainter` | `shared/painters/` | `CustomPainter` que desenha as guias sobre o preview; círculos principais nunca passam por `drawOval` |
+| Workflow | `features/collimation/` | `CollimationWorkflowEngine` define textos, notas ópticas e guias padrão de cada etapa; o controller (Riverpod) gerencia sessão, navegação e edições |
+| Persistência | `core/storage/` | perfis, sessões e guias em armazenamento local (`SharedPreferences`) — nada sai do aparelho |
 
-## Como usar
+Decisões de projeto que valem conhecer antes de contribuir:
 
-### 1. Instalar
+- **A elipse é só diagnóstico.** Existe uma `DiagnosticEllipse` no domínio,
+  mas ela nunca pode ser usada como referência principal — se um círculo de
+  referência parecer oval, o problema é o preview (etapa 1), não a guia.
+- **Escala uniforme é inegociável.** Qualquer mudança no viewport precisa
+  manter o mesmo fator de escala em X e Y. `BoxFit.fill` e afins são bugs
+  por definição neste app.
+- **Guias padrão são ponto de partida, não verdade.** Cada etapa nasce com
+  guias sensatas (`defaultGuides`), mas o usuário pode editar, duplicar e
+  reposicionar tudo — o estado editado é o que persiste na sessão.
 
-Baixe o APK mais recente em [Releases](../../releases).
+## Compilando
 
-**Requisitos:** Android 16+, câmera traseira, ~60 MB
+Requisitos:
 
-### 2. Começar
-
-1. Conceda permissão de câmera
-2. Cadastre seu telescópio
-3. Escolha modo automático ou avançado
-4. Siga as 7 etapas do guia
-
-### 3. Editor de guias
-
-Toque em qualquer círculo para abrir o painel de edição:
-- Ajuste raio, espessura, opacidade
-- Escolha entre 6 cores presets
-- Bloqueie ou oculte guias conforme necessário
-
-## Arquitetura
-
-```
-lib/
-  app/              # App principal, tema, rotas
-  core/             # Geometria, câmera, viewport, storage
-  features/
-    collimation/    # Lógica + tela principal
-    telescope_profile/
-    adapter_profile/
-    history/
-    guide/
-  shared/           # Widgets, painters
-```
-
-## Stack técnico
-
-- Flutter 3.44.4 • Dart 3.12.2 • Material Design 3
-- Riverpod 2.6.1 (estado) • GoRouter 14.8.1 (navegação)
-- camera 0.11.0 • shared_preferences • intl
-
-## Desenvolvimento
+- Flutter (canal estável) com as ferramentas de Android
 
 ```bash
-git clone https://github.com/amaro-miranda/collima_scope.git
+git clone https://github.com/AmaroMiranda/collima_scope.git
 cd collima_scope
 flutter pub get
-flutter run
+flutter run            # dispositivo real recomendado (precisa de câmera)
+```
 
-# Testes
-flutter test
+Release:
 
-# Build release
+```bash
 flutter build apk --release
 ```
 
-## Segurança
+O emulador funciona para navegar na interface, mas a validação de verdade
+pede um aparelho real apontado para um focador — o preview da câmera é o
+coração do app.
 
-- ✅ Nenhuma chave de API armazenada
-- ✅ Sem rastreamento de dados
-- ✅ Totalmente offline
-- ✅ Permissões mínimas (apenas câmera)
-- ✅ Dados salvos localmente
+## Testes
 
-## Licença
+```bash
+flutter test
+```
 
-[MIT License](LICENSE) — Use, modifique e distribua livremente.
+A suíte cobre o `ViewportTransform` (escala uniforme, cover/contain,
+rotações), a serialização das guias, o controller do fluxo de colimação e a
+exportação com overlay.
+
+## Estrutura do projeto
+
+```
+lib/
+  app/                  MaterialApp, tema (escuro + modo vermelho), rotas
+  core/
+    geometry/           Point2D normalizado
+    viewport/           ViewportTransform (escala uniforme)
+    camera/             engine da câmera (plugin camera)
+    storage/            persistência local
+    export/             exportação de captura com overlay
+  features/
+    collimation/        workflow, controller, tela da câmera, editor de guias
+    telescope_profile/  perfis de telescópio (CRUD)
+    adapter_profile/    perfis de adaptador (CRUD)
+    history/            sessões, capturas antes/depois, detalhe
+    guide/              guia educativo das etapas
+    home/               tela inicial
+  shared/painters/      GuidePainter (CustomPainter das guias)
+test/                   viewport, guias, controller, exportação
+```
+
+## Segurança e privacidade
+
+- Nenhuma chave de API, nenhum backend, nenhum rastreamento
+- Funciona 100% offline; dados ficam no aparelho
+- Permissão única: câmera
 
 ## Contribuindo
 
-1. Fork o repositório
-2. Crie uma branch (`git checkout -b feature/sua-ideia`)
-3. Commit com mensagens descritivas
-4. Push e abra um PR
+1. Fork, branch (`git checkout -b feature/sua-ideia`), commits descritivos, PR.
+2. **Respeite a regra dos círculos**: qualquer PR que introduza escala
+   não-uniforme no viewport ou desenhe guia principal como elipse será
+   recusado — essa é a invariante que faz o app funcionar.
+3. Mudanças de comportamento óptico (textos das etapas, notas, guias padrão)
+   devem citar a referência de colimação que as justifica.
+4. Teste em dispositivo real antes de abrir o PR.
 
-**Diretrizes:** Respeite a regra crítica — **círculos nunca achatam**. Teste em dispositivo real. Atualize a spec se mudar comportamento óptico.
+Ideias já mapeadas para V2: detecção automática de círculos (OpenCV),
+análise de desalinhamento assistida, suporte a SCT/RC e refratores, iOS.
 
 ## FAQ
 
-**P: Preciso de um adaptador?**  
-R: Não é obrigatório, mas com um adaptador centralizado no focador, a precisão melhora muito.
+**Preciso de um adaptador de celular?**
+Não é obrigatório para explorar o app, mas para colimar de verdade sim: a
+câmera precisa estar estável e centralizada no focador. Qualquer suporte
+universal de ocular funciona.
 
-**P: Funciona em iPhone?**  
-R: Atualmente apenas Android. iOS pode ser adicionado em V2.
+**O círculo de teste parece oval. E agora?**
+Não continue — é exatamente para isso que a etapa 1 existe. Verifique se o
+preview não está sendo esticado por alguma configuração de tela/zoom do
+aparelho e reinicie a sessão.
 
-**P: Como exporto as imagens?**  
-R: No histórico, toque em uma sessão → "Exportar imagem com overlay".
+**Funciona em SCT, RC ou refrator?**
+O fluxo atual foi desenhado para Newtonianos e Dobsonianos. Outros desenhos
+ópticos estão no radar da V2.
 
-## Créditos
+**Funciona em iPhone?**
+Ainda não — Android primeiro. iOS depende de demanda (e de um Mac por perto).
 
-Desenvolvido por **Amaro Miranda** 🔭✨
+## Licença
 
-CollimaScope — Seu assistente visual de colimação, sempre no seu bolso. 📱
+Copyright 2026 Amaro Miranda
+
+Licenciado sob a [MIT License](LICENSE).
