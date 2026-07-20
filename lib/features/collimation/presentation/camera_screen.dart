@@ -258,6 +258,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   ? GuideEditorPanel(
                       onClose: () => setState(() => _editorOpen = false))
                   : _BottomPanel(
+                      // Reseta a dica para "recolhida" a cada nova etapa, em
+                      // vez de manter o texto aberto sobre a próxima imagem.
+                      key: ValueKey(stepInfo.step),
                       onFreeze: () async {
                         await _engine.setFrozen(!_engine.isFrozen);
                         setState(() {});
@@ -549,7 +552,7 @@ class _RoundIconButton extends StatelessWidget {
   }
 }
 
-class _BottomPanel extends StatelessWidget {
+class _BottomPanel extends StatefulWidget {
   final VoidCallback onFreeze;
   final ValueChanged<bool> onTorch;
   final VoidCallback onCapture;
@@ -570,6 +573,7 @@ class _BottomPanel extends StatelessWidget {
   final VoidCallback? onDistortion;
 
   const _BottomPanel({
+    super.key,
     required this.onFreeze,
     required this.onTorch,
     required this.onCapture,
@@ -591,7 +595,26 @@ class _BottomPanel extends StatelessWidget {
   });
 
   @override
+  State<_BottomPanel> createState() => _BottomPanelState();
+}
+
+class _BottomPanelState extends State<_BottomPanel> {
+  // Recolhida por padrão (feedback de teste de campo: o texto fixo sobre a
+  // câmera atrapalhava a visão durante o ajuste). O widget é recriado com uma
+  // key por etapa (ver camera_screen), então este estado volta a "fechado"
+  // a cada nova etapa em vez de continuar aberto por cima da próxima imagem.
+  bool _tipOpen = false;
+
+  @override
   Widget build(BuildContext context) {
+    final stepInfo = widget.stepInfo;
+    final extraNote = widget.extraNote;
+    final onDistortion = widget.onDistortion;
+    final zoom = widget.zoom;
+    final minZoom = widget.minZoom;
+    final maxZoom = widget.maxZoom;
+    final onZoom = widget.onZoom;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: const BoxDecoration(
@@ -604,74 +627,117 @@ class _BottomPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Material(
               color: Colors.black54,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(stepInfo.title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14)),
-                const SizedBox(height: 4),
-                Text(stepInfo.instruction,
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12)),
-                if (stepInfo.opticalNote != null) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => setState(() => _tipOpen = !_tipOpen),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.info_outline,
-                          size: 14, color: Colors.amberAccent),
+                      Icon(
+                        _tipOpen
+                            ? Icons.lightbulb
+                            : Icons.lightbulb_outline,
+                        size: 16,
+                        color: Colors.amberAccent,
+                      ),
                       const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(stepInfo.opticalNote!,
-                            style: const TextStyle(
-                                color: Colors.amberAccent, fontSize: 11)),
+                      Text('Dica · ${stepInfo.shortLabel}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _tipOpen ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: Colors.white70,
                       ),
                     ],
                   ),
-                ],
-                if (extraNote != null) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.priority_high_rounded,
-                          size: 14, color: Color(0xFFF4C95D)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(extraNote!,
-                            style: const TextStyle(
-                                color: Color(0xFFF4C95D), fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                ],
-                if (onDistortion != null) ...[
-                  const SizedBox(height: 2),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: onDistortion,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                      ),
-                      child: const Text('Há deformação? Saiba como testar',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                ],
-              ],
+                ),
+              ),
             ),
           ),
+          if (_tipOpen) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(stepInfo.title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(stepInfo.instruction,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12)),
+                  if (stepInfo.opticalNote != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline,
+                            size: 14, color: Colors.amberAccent),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(stepInfo.opticalNote!,
+                              style: const TextStyle(
+                                  color: Colors.amberAccent, fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (extraNote != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.priority_high_rounded,
+                            size: 14, color: Color(0xFFF4C95D)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(extraNote,
+                              style: const TextStyle(
+                                  color: Color(0xFFF4C95D), fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (onDistortion != null) ...[
+                    const SizedBox(height: 2),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: onDistortion,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                        ),
+                        child: const Text('Há deformação? Saiba como testar',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           if (maxZoom > minZoom)
             SliderTheme(
@@ -698,13 +764,13 @@ class _BottomPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _RoundIconButton(
-                  icon: frozen ? Icons.play_arrow : Icons.pause,
-                  onTap: onFreeze),
+                  icon: widget.frozen ? Icons.play_arrow : Icons.pause,
+                  onTap: widget.onFreeze),
               _RoundIconButton(
-                  icon: Icons.add_circle_outline, onTap: onAddCircle),
-              _RoundIconButton(icon: Icons.tune, onTap: onEditCircles),
+                  icon: Icons.add_circle_outline, onTap: widget.onAddCircle),
+              _RoundIconButton(icon: Icons.tune, onTap: widget.onEditCircles),
               GestureDetector(
-                onTap: onCapture,
+                onTap: widget.onCapture,
                 child: Container(
                   width: 64,
                   height: 64,
@@ -719,7 +785,7 @@ class _BottomPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              _TorchButton(onTorch: onTorch),
+              _TorchButton(onTorch: widget.onTorch),
               const SizedBox(width: 4),
             ],
           ),
@@ -728,7 +794,7 @@ class _BottomPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: isFirstStep ? null : onPrevStep,
+                  onPressed: widget.isFirstStep ? null : widget.onPrevStep,
                   child: const Text('Voltar'),
                 ),
               ),
@@ -736,8 +802,8 @@ class _BottomPanel extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: FilledButton(
-                  onPressed: onNextStep,
-                  child: Text(nextLabel,
+                  onPressed: widget.onNextStep,
+                  child: Text(widget.nextLabel,
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
