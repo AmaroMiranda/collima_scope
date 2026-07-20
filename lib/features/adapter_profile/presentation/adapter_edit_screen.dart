@@ -72,7 +72,7 @@ class _AdapterEditScreenState extends ConsumerState<AdapterEditScreen> {
                 decoration: const InputDecoration(labelText: 'Nome do adaptador'),
               ),
               const SizedBox(height: 16),
-              Text('Tamanho do focador',
+              Text('Tamanho do focalizador',
                   style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 6),
               SegmentedButton<FocuserSize>(
@@ -100,10 +100,11 @@ class _AdapterEditScreenState extends ConsumerState<AdapterEditScreen> {
               const SizedBox(height: 16),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Adaptador validado'),
+                title: const Text('Alinhado manualmente'),
                 subtitle: const Text(
-                    'Marque após confirmar que a câmera está centralizada '
-                    'e estável no focador (etapa de calibração)'),
+                    'Marque após centralizar a câmera no focalizador de forma '
+                    'estável. Este é um registro manual — o aplicativo ainda '
+                    'não mede deslocamento nem inclinação.'),
                 value: _validated,
                 onChanged: (v) => setState(() => _validated = v),
               ),

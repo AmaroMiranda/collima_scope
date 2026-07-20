@@ -38,20 +38,6 @@ class SafetyNotifier extends StateNotifier<bool?> {
 final safetyAcceptedProvider = StateNotifierProvider<SafetyNotifier, bool?>(
     (ref) => SafetyNotifier(ref.watch(appPrefsProvider)));
 
-/// Preview validado como não deformado (Etapa 1)?
-class PreviewCalibrationNotifier extends StateNotifier<bool> {
-  final AppPrefs _prefs;
-
-  PreviewCalibrationNotifier(this._prefs) : super(false) {
-    _prefs.getPreviewCalibrated().then((v) => state = v);
-  }
-
-  Future<void> setCalibrated(bool value) async {
-    state = value;
-    await _prefs.setPreviewCalibrated(value);
-  }
-}
-
-final previewCalibratedProvider =
-    StateNotifierProvider<PreviewCalibrationNotifier, bool>(
-        (ref) => PreviewCalibrationNotifier(ref.watch(appPrefsProvider)));
+// O antigo previewCalibratedProvider (boolean global e permanente) foi
+// removido — auditoria P1.3: a verificação da imagem acontece a cada sessão
+// e nunca marca nada como "calibrado".

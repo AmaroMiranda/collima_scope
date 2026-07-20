@@ -18,7 +18,7 @@ class AdapterProfile {
   final FocuserSize focuserSize;
   final PhoneMountType phoneMountType;
 
-  /// Deslocamento residual da câmera em relação ao eixo do focador,
+  /// Deslocamento residual da câmera em relação ao eixo do focalizador,
   /// em coordenadas normalizadas (-0.5 a 0.5). Medido na calibração.
   final double cameraOffsetX;
   final double cameraOffsetY;

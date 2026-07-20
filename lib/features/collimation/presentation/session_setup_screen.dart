@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/providers.dart';
 import '../../adapter_profile/application/adapter_providers.dart';
 import '../../adapter_profile/domain/adapter_profile.dart';
 import '../../telescope_profile/application/telescope_providers.dart';
@@ -20,7 +19,16 @@ class SessionSetupScreen extends ConsumerStatefulWidget {
 class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
   String? _telescopeId;
   String? _adapterId;
-  bool _advancedMode = false;
+
+  void _start(TelescopeProfile telescope, AdapterProfile? adapter,
+      {required bool advanced}) {
+    ref.read(collimationControllerProvider.notifier).startSession(
+          telescope: telescope,
+          adapter: adapter,
+          advancedMode: advanced,
+        );
+    context.pushReplacement('/collimate');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,10 +89,33 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                       onChanged: (v) => setState(() => _telescopeId = v),
                       title: Text(t.name),
                       subtitle: Text(
-                          '${t.type.label} · Focador ${t.focuserSize.label}'
-                          '${t.apertureMm != null ? ' · ${t.apertureMm!.toStringAsFixed(0)} mm' : ''}'),
+                          '${t.type.label} · ${t.techSummary}\n${t.collimationDemandLabel}'),
+                      isThreeLine: true,
                     ),
                   )),
+              if (selectedTelescope.isFastScope)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.speed, color: scheme.tertiary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Telescópio rápido: a tolerância de colimação é '
+                              'pequena${selectedTelescope.primaryAxialToleranceMm != null ? ' (~${selectedTelescope.primaryAxialToleranceMm!.toStringAsFixed(2)} mm no eixo do primário)' : ''}. '
+                              'Considere validar com Cheshire e star test.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 20),
               Text('Adaptador (opcional)',
                   style: Theme.of(context).textTheme.titleMedium),
@@ -95,7 +126,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                   groupValue: selectedAdapter?.id,
                   onChanged: (_) => setState(() => _adapterId = null),
                   title: const Text('Sem adaptador'),
-                  subtitle: const Text('Modo referência visual'),
+                  subtitle: const Text('Modo de referência visual'),
                 ),
               ),
               ...adapterList.map((a) => Card(
@@ -105,10 +136,12 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                       onChanged: (v) => setState(() => _adapterId = v),
                       title: Text(a.name),
                       subtitle: Text(a.isValidated
-                          ? 'Validado · ${a.phoneMountType.label}'
-                          : 'Não validado · ${a.phoneMountType.label}'),
+                          ? 'Alinhado manualmente · ${a.phoneMountType.label}'
+                          : 'Não alinhado · ${a.phoneMountType.label}'),
+                      // Amarelo = alinhamento manual; verde fica reservado
+                      // para calibração medida (ainda inexistente).
                       secondary: a.isValidated
-                          ? Icon(Icons.verified, color: scheme.secondary)
+                          ? Icon(Icons.tune, color: scheme.tertiary)
                           : null,
                     ),
                   )),
@@ -130,12 +163,16 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                       Expanded(
                         child: Text(
                           selectedAdapter == null
-                              ? 'Modo referência visual. Para maior precisão, '
-                                  'use um adaptador centralizado no focador.'
+                              ? 'Modo de referência visual. Para maior '
+                                  'precisão, use um adaptador centralizado '
+                                  'no focalizador.'
                               : selectedAdapter.isValidated
-                                  ? 'Modo assistido com adaptador calibrado.'
-                                  : 'Modo manual assistido. Valide o adaptador '
-                                      'na etapa de calibração para maior precisão.',
+                                  ? 'Modo assistido com alinhamento manual do '
+                                      'adaptador. O aplicativo ainda não mede '
+                                      'o erro residual do alinhamento.'
+                                  : 'Modo assistido sem alinhamento '
+                                      'registrado. Alinhe o adaptador na '
+                                      'etapa correspondente.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
@@ -143,31 +180,49 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Card(
-                child: SwitchListTile(
-                  title: const Text('Modo avançado'),
-                  subtitle: const Text(
-                      'Pular calibração e ir direto para a colimação'),
-                  value: _advancedMode,
-                  onChanged: (v) => setState(() => _advancedMode = v),
-                ),
-              ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () {
-                  final previewCalibrated =
-                      ref.read(previewCalibratedProvider);
-                  ref.read(collimationControllerProvider.notifier).startSession(
-                        telescope: selectedTelescope,
-                        adapter: selectedAdapter,
-                        previewAlreadyCalibrated: previewCalibrated,
-                        advancedMode: _advancedMode,
-                      );
-                  context.pushReplacement('/collimate');
-                },
+                onPressed: () => _start(selectedTelescope, selectedAdapter,
+                    advanced: false),
                 icon: const Icon(Icons.videocam),
                 label: const Text('Abrir câmera'),
+              ),
+              const SizedBox(height: 8),
+              // Ação perigosa fora do caminho comum (UX P0.7): recolhida,
+              // com consequências explícitas.
+              ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: Text('Opções avançadas',
+                    style: Theme.of(context).textTheme.titleSmall),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pular verificações pode reduzir a precisão e fazer '
+                          'o aplicativo usar referências incompatíveis com a '
+                          'montagem atual.',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: scheme.tertiary),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => _start(
+                                selectedTelescope, selectedAdapter,
+                                advanced: true),
+                            child: const Text('Iniciar sem verificações'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           );

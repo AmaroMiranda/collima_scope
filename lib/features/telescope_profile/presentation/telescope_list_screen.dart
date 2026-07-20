@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../application/telescope_providers.dart';
 import '../domain/telescope_profile.dart'
-    show FocuserSizeLabel, TelescopeTypeLabel;
+    show TelescopeTypeLabel;
 
 class TelescopeListScreen extends ConsumerWidget {
   const TelescopeListScreen({super.key});
@@ -44,7 +44,9 @@ class TelescopeListScreen extends ConsumerWidget {
                   leading: const Icon(Icons.circle_outlined),
                   title: Text(t.name),
                   subtitle: Text(
-                      '${t.type.label} · Focador ${t.focuserSize.label} · ${t.primaryScrewCount} parafusos'),
+                      '${t.type.label} · ${t.techSummary}\n'
+                      '${t.collimationDemandLabel} · ${t.primaryScrewCount} parafusos'),
+                  isThreeLine: true,
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/telescopes/edit?id=${t.id}'),
                 ),

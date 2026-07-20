@@ -44,6 +44,48 @@ class TelescopeProfile {
     required this.updatedAt,
   });
 
+  // ----- Dados derivados (auditoria P0.4: abertura/focal deixam de ser
+  // decorativos e passam a informar exigência e tolerância) -----
+
+  /// Relação focal (f/D). Nula quando abertura ou focal não foram informadas.
+  double? get focalRatio {
+    final a = apertureMm;
+    final f = focalLengthMm;
+    if (a == null || f == null || a <= 0) return null;
+    return f / a;
+  }
+
+  /// Telescópios f/5 ou mais rápidos exigem colimação bem mais precisa.
+  bool get isFastScope => (focalRatio ?? 99) <= 5.0;
+
+  /// Tolerância axial prática do primário: 0,005 mm × f³ (referência de
+  /// literatura — ordem de grandeza, não norma).
+  double? get primaryAxialToleranceMm {
+    final f = focalRatio;
+    if (f == null) return null;
+    return 0.005 * f * f * f;
+  }
+
+  /// Classificação da exigência de colimação a partir da relação focal.
+  String get collimationDemandLabel {
+    final f = focalRatio;
+    if (f == null) return 'Exigência desconhecida';
+    if (f <= 4.5) return 'Exigência alta (telescópio rápido)';
+    if (f <= 6.0) return 'Exigência moderada';
+    return 'Exigência baixa';
+  }
+
+  /// Resumo técnico curto para cartões: "f/5 · focalizador de 2"".
+  String get techSummary {
+    final f = focalRatio;
+    final parts = <String>[
+      if (f != null) 'f/${f.toStringAsFixed(f % 1 == 0 ? 0 : 1)}',
+      'focalizador ${focuserSize.label}',
+      if (hasPrimaryCenterMark) 'marca central',
+    ];
+    return parts.join(' · ');
+  }
+
   TelescopeProfile copyWith({
     String? name,
     TelescopeType? type,

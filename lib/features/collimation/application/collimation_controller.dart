@@ -92,10 +92,12 @@ class CollimationController extends Notifier<CollimationState> {
   void startSession({
     required TelescopeProfile telescope,
     AdapterProfile? adapter,
-    bool previewAlreadyCalibrated = false,
     bool advancedMode = false,
   }) {
-    final firstStep = (advancedMode || previewAlreadyCalibrated)
+    // A verificação da imagem NUNCA é pulada por uma flag persistida
+    // (auditoria P1.3): trocar de aparelho/lente/zoom invalida qualquer
+    // verificação anterior. Só o modo avançado explícito pula, com aviso.
+    final firstStep = advancedMode
         ? CollimationStep.centerFocuser
         : CollimationStep.previewCalibration;
     state = CollimationState(
@@ -263,6 +265,8 @@ class CollimationController extends Notifier<CollimationState> {
       beforeImagePath: s.beforeImagePath,
       afterImagePath: s.afterImagePath,
       guides: s.guides,
+      // Todas as etapas visitadas, não só a atual (auditoria P2.1).
+      guidesByStep: s.guidesByStep,
       notes: notes,
     );
     await ref.read(sessionsProvider.notifier).save(session);

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/providers.dart';
 import '../../../core/camera/camera_engine.dart';
 import '../../../core/export/overlay_exporter.dart';
 import '../../../core/storage/local_store.dart';
@@ -30,6 +29,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   ViewportTransform? _transform;
   String? _draggingGuideId;
 
+  /// Serializa inicialização/descarte da câmera (auditoria P2.3): sem isto,
+  /// um pause/resume rápido dispara init e dispose concorrentes e a câmera
+  /// volta preta.
+  Future<void> _lifecycleChain = Future.value();
+
   @override
   void initState() {
     super.initState();
@@ -37,35 +41,111 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _init();
   }
 
-  Future<void> _init() async {
-    try {
-      final selection = await _engine.initialize();
-      setState(() {
-        _mainCameraConfirmed = selection.mainCameraConfirmed;
-        _initializing = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = '$e';
-        _initializing = false;
-      });
-    }
+  void _init() {
+    _lifecycleChain = _lifecycleChain.then((_) async {
+      try {
+        final selection = await _engine.initialize();
+        if (!mounted) return;
+        setState(() {
+          _mainCameraConfirmed = selection.mainCameraConfirmed;
+          _initializing = false;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _error = '$e';
+          _initializing = false;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _engine.dispose();
+    _lifecycleChain = _lifecycleChain.then((_) => _engine.dispose());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive) {
-      _engine.dispose();
-    } else if (state == AppLifecycleState.resumed && !_engine.isReady) {
-      _init();
+      _lifecycleChain = _lifecycleChain.then((_) => _engine.dispose());
+    } else if (state == AppLifecycleState.resumed) {
+      _lifecycleChain = _lifecycleChain.then((_) async {
+        if (!mounted || _engine.isReady) return;
+        _init();
+      });
     }
+  }
+
+  /// Confirmação antes de abandonar uma sessão com ajustes (UX P0.5).
+  Future<void> _confirmExit(CollimationState state,
+      CollimationController controller) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sair da sessão?'),
+        content: const Text('Os ajustes não salvos serão perdidos.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('stay'),
+            child: const Text('Continuar sessão'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('draft'),
+            child: const Text('Salvar rascunho e sair'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('discard'),
+            child: const Text('Sair sem salvar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'draft':
+        await controller.saveSession();
+        if (mounted) context.go('/');
+      case 'discard':
+        context.go('/');
+      default:
+        break; // continuar na sessão
+    }
+  }
+
+  /// Ação "Há deformação" da etapa de verificação da imagem (auditoria P0.1).
+  Future<void> _reportDistortion() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Imagem com deformação'),
+        content: const Text(
+            'Não continue com esta câmera/lente: as guias circulares não '
+            'serão confiáveis.\n\nComo testar: aponte para um objeto '
+            'perfeitamente circular (CD, tampa, gabarito impresso), '
+            'centralize-o e gire o aparelho — a borda deve continuar '
+            'coincidindo com o círculo de referência em qualquer orientação. '
+            'Se deformar, tente outra lente (evite a ultrawide), desligue '
+            'ajustes automáticos de "correção" da câmera, ou use outro '
+            'aparelho.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _finishSession(CollimationController controller) async {
+    await controller.saveSession(finished: true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Sessão concluída e salva no histórico.')));
+    context.go('/');
   }
 
   @override
@@ -93,6 +173,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final collimation = ref.watch(collimationControllerProvider);
     final controller = ref.read(collimationControllerProvider.notifier);
     final stepInfo = collimation.stepInfo;
+    final telescope = collimation.telescope;
+
+    // Nota dinâmica conforme o equipamento (auditoria P0.4).
+    String? equipmentNote;
+    if (stepInfo.step == CollimationStep.adjustPrimary &&
+        telescope != null &&
+        !telescope.hasPrimaryCenterMark) {
+      equipmentNote =
+          'Este telescópio foi cadastrado sem marca central no primário: as '
+          'referências de reflexo não se aplicam. Use uma referência física '
+          '(Cheshire/tampa) e considere marcar o centro do espelho.';
+    } else if (telescope != null &&
+        telescope.isFastScope &&
+        (stepInfo.step == CollimationStep.adjustPrimary ||
+            stepInfo.step == CollimationStep.alignSecondaryToPrimary)) {
+      final tol = telescope.primaryAxialToleranceMm;
+      equipmentNote =
+          'Telescópio rápido (${telescope.techSummary.split(' · ').first}): '
+          'a tolerância de colimação é pequena'
+          '${tol != null ? ' (~${tol.toStringAsFixed(2)} mm no eixo do primário)' : ''}. '
+          'Prefira validar com referência física e star test.';
+    }
+
+    final isVerifyStep = stepInfo.step == CollimationStep.previewCalibration;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -116,28 +220,34 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-            if (!_mainCameraConfirmed)
-              Positioned(
-                top: 8,
-                left: 12,
-                right: 12,
-                child: _Banner(
-                  icon: Icons.warning_amber_rounded,
-                  color: scheme.tertiary,
-                  text: 'Não foi possível confirmar a lente principal. '
-                      'Evite usar a câmera ultrawide para colimação.',
-                ),
-              ),
             Positioned(
-              top: _mainCameraConfirmed ? 8 : 48,
+              top: 8,
               left: 12,
               right: 12,
               child: _TopBar(
                 stepLabel:
-                    '${collimation.stepIndex + 1}/${CollimationWorkflowEngine.steps.length} · ${stepInfo.shortLabel}',
-                onClose: () => context.go('/'),
+                    'Etapa ${collimation.stepIndex + 1} de ${CollimationWorkflowEngine.steps.length} · ${stepInfo.shortLabel}',
+                onClose: () => _confirmExit(collimation, controller),
                 onReset: controller.resetStepGuides,
                 onStepTap: () => _openStepPicker(collimation, controller),
+              ),
+            ),
+            // Barra de estado da câmera (UX §8.3): zoom, congelamento, modo e
+            // avisos perigosos como chips sempre visíveis.
+            Positioned(
+              top: 56,
+              left: 12,
+              right: 12,
+              child: _CamStatusChips(
+                zoom: _engine.zoom,
+                frozen: _engine.isFrozen,
+                modeLabel: collimation.adapter == null
+                    ? 'Referência visual'
+                    : (collimation.adapter!.isValidated
+                        ? 'Alinhamento manual'
+                        : 'Sem alinhamento'),
+                lensWarning: !_mainCameraConfirmed,
+                warningColor: scheme.tertiary,
               ),
             ),
             Positioned(
@@ -169,18 +279,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         setState(() {});
                       },
                       stepInfo: stepInfo,
+                      extraNote: equipmentNote,
                       isFirstStep: collimation.isFirstStep,
                       isLastStep: collimation.isLastStep,
                       onPrevStep: controller.previousStep,
-                      onNextStep: () {
-                        if (stepInfo.step ==
-                            CollimationStep.previewCalibration) {
-                          ref
-                              .read(previewCalibratedProvider.notifier)
-                              .setCalibrated(true);
-                        }
-                        controller.nextStep();
-                      },
+                      // A verificação da imagem nunca marca nada como
+                      // "calibrado" (auditoria P0.1/P1.3) — apenas avança
+                      // com rótulo honesto.
+                      nextLabel: collimation.isLastStep
+                          ? 'Concluir sessão'
+                          : isVerifyStep
+                              ? 'A imagem parece regular'
+                              : 'Confirmar e avançar',
+                      onNextStep: collimation.isLastStep
+                          ? () => _finishSession(controller)
+                          : controller.nextStep,
+                      onDistortion: isVerifyStep ? _reportDistortion : null,
                     ),
             ),
           ],
@@ -246,8 +360,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final id = _draggingGuideId;
     final t = _transform;
     if (id == null || t == null) return;
-    final dx = delta.dx / t.shortestVisibleSide;
-    final dy = delta.dy / t.shortestVisibleSide;
+    // Coordenadas normalizadas: X é fração da LARGURA visível e Y da ALTURA
+    // (auditoria P1.1). Dividir ambos pelo menor lado fazia a guia andar em
+    // proporção diferente do dedo em telas retangulares.
+    final rect = t.visibleWidgetRect;
+    if (rect.width == 0 || rect.height == 0) return;
+    final dx = delta.dx / rect.width;
+    final dy = delta.dy / rect.height;
     controller.moveGuide(id, dx, dy);
   }
 
@@ -296,12 +415,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-            isBefore ? 'Imagem "antes" salva.' : 'Imagem "depois" salva.'),
+            isBefore ? 'Imagem inicial salva.' : 'Imagem final salva.'),
       ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Falha ao capturar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Não foi possível capturar a imagem: $e')));
     }
   }
 }
@@ -355,31 +474,52 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _Banner extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String text;
+/// Barra de estado da câmera (UX §8.3): condição atual sempre visível, com
+/// estados perigosos destacados.
+class _CamStatusChips extends StatelessWidget {
+  final double zoom;
+  final bool frozen;
+  final String modeLabel;
+  final bool lensWarning;
+  final Color warningColor;
 
-  const _Banner({required this.icon, required this.color, required this.text});
+  const _CamStatusChips({
+    required this.zoom,
+    required this.frozen,
+    required this.modeLabel,
+    required this.lensWarning,
+    required this.warningColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(text,
-                  style: const TextStyle(color: Colors.white, fontSize: 12))),
-        ],
-      ),
+    Widget chip(String text, {Color? color}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xC704070A),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+                color: (color ?? Colors.white).withValues(alpha: 0.25)),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+                color: color ?? Colors.white70,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700),
+          ),
+        );
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        chip('${zoom.toStringAsFixed(1).replaceAll('.', ',')}×'),
+        if (frozen) chip('Congelado', color: const Color(0xFF6DE6A3)),
+        chip(modeLabel,
+            color: modeLabel == 'Alinhamento manual' ? warningColor : null),
+        if (lensWarning) chip('Lente não confirmada', color: warningColor),
+      ],
     );
   }
 }
@@ -421,10 +561,13 @@ class _BottomPanel extends StatelessWidget {
   final double maxZoom;
   final ValueChanged<double> onZoom;
   final StepInfo stepInfo;
+  final String? extraNote;
   final bool isFirstStep;
   final bool isLastStep;
   final VoidCallback onPrevStep;
   final VoidCallback onNextStep;
+  final String nextLabel;
+  final VoidCallback? onDistortion;
 
   const _BottomPanel({
     required this.onFreeze,
@@ -438,10 +581,13 @@ class _BottomPanel extends StatelessWidget {
     required this.maxZoom,
     required this.onZoom,
     required this.stepInfo,
+    this.extraNote,
     required this.isFirstStep,
     required this.isLastStep,
     required this.onPrevStep,
     required this.onNextStep,
+    required this.nextLabel,
+    this.onDistortion,
   });
 
   @override
@@ -490,6 +636,37 @@ class _BottomPanel extends StatelessWidget {
                                 color: Colors.amberAccent, fontSize: 11)),
                       ),
                     ],
+                  ),
+                ],
+                if (extraNote != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.priority_high_rounded,
+                          size: 14, color: Color(0xFFF4C95D)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(extraNote!,
+                            style: const TextStyle(
+                                color: Color(0xFFF4C95D), fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+                if (onDistortion != null) ...[
+                  const SizedBox(height: 2),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: onDistortion,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                      ),
+                      child: const Text('Há deformação? Saiba como testar',
+                          style: TextStyle(fontSize: 12)),
+                    ),
                   ),
                 ],
               ],
@@ -552,14 +729,16 @@ class _BottomPanel extends StatelessWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: isFirstStep ? null : onPrevStep,
-                  child: const Text('Anterior'),
+                  child: const Text('Voltar'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
+                flex: 2,
                 child: FilledButton(
-                  onPressed: isLastStep ? null : onNextStep,
-                  child: Text(isLastStep ? 'Concluído' : 'Próxima etapa'),
+                  onPressed: onNextStep,
+                  child: Text(nextLabel,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],

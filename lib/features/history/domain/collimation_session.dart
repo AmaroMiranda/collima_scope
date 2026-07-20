@@ -1,17 +1,22 @@
+import '../../collimation/domain/collimation_workflow.dart'
+    show CollimationStep;
 import '../../collimation/domain/guides.dart';
 
 enum CollimationMode {
   visualReference,
   manualAssisted,
-  adapterCalibrated,
+  adapterCalibrated, // identificador legado; na prática = alinhamento manual
   automaticExperimental,
 }
 
 extension CollimationModeLabel on CollimationMode {
+  /// Rótulos honestos (auditoria P0.2): "calibrado" fica reservado para uma
+  /// futura calibração medida — hoje o melhor estado é o alinhamento manual.
   String get label => switch (this) {
         CollimationMode.visualReference => 'Referência visual',
-        CollimationMode.manualAssisted => 'Manual assistido',
-        CollimationMode.adapterCalibrated => 'Adaptador calibrado',
+        CollimationMode.manualAssisted => 'Assistido · adaptador sem alinhamento',
+        CollimationMode.adapterCalibrated =>
+          'Assistido · alinhamento manual do adaptador',
         CollimationMode.automaticExperimental => 'Automático (experimental)',
       };
 }
@@ -27,6 +32,11 @@ class CollimationSession {
   final String? beforeImagePath;
   final String? afterImagePath;
   final List<CollimationGuide> guides;
+
+  /// Guias de TODAS as etapas visitadas (auditoria P2.1) — sem isto o
+  /// histórico não consegue reconstruir como cada etapa foi ajustada.
+  /// [guides] permanece como a lista da última etapa, para compatibilidade.
+  final Map<CollimationStep, List<CollimationGuide>> guidesByStep;
   final String? notes;
 
   const CollimationSession({
@@ -40,6 +50,7 @@ class CollimationSession {
     this.beforeImagePath,
     this.afterImagePath,
     this.guides = const [],
+    this.guidesByStep = const {},
     this.notes,
   });
 
@@ -49,6 +60,7 @@ class CollimationSession {
     String? beforeImagePath,
     String? afterImagePath,
     List<CollimationGuide>? guides,
+    Map<CollimationStep, List<CollimationGuide>>? guidesByStep,
     String? notes,
   }) =>
       CollimationSession(
@@ -62,6 +74,7 @@ class CollimationSession {
         beforeImagePath: beforeImagePath ?? this.beforeImagePath,
         afterImagePath: afterImagePath ?? this.afterImagePath,
         guides: guides ?? this.guides,
+        guidesByStep: guidesByStep ?? this.guidesByStep,
         notes: notes ?? this.notes,
       );
 
@@ -76,6 +89,10 @@ class CollimationSession {
         'beforeImagePath': beforeImagePath,
         'afterImagePath': afterImagePath,
         'guides': guides.map((g) => g.toJson()).toList(),
+        'guidesByStep': guidesByStep.map(
+          (step, list) =>
+              MapEntry(step.name, list.map((g) => g.toJson()).toList()),
+        ),
         'notes': notes,
       };
 
@@ -96,6 +113,23 @@ class CollimationSession {
         guides: (json['guides'] as List<dynamic>? ?? [])
             .map((g) => CollimationGuide.fromJson(g as Map<String, dynamic>))
             .toList(),
+        guidesByStep: _guidesByStepFromJson(json['guidesByStep']),
         notes: json['notes'] as String?,
       );
+
+  static Map<CollimationStep, List<CollimationGuide>> _guidesByStepFromJson(
+      Object? raw) {
+    if (raw is! Map<String, dynamic>) return const {};
+    final result = <CollimationStep, List<CollimationGuide>>{};
+    for (final entry in raw.entries) {
+      final step = CollimationStep.values
+          .where((s) => s.name == entry.key)
+          .firstOrNull;
+      if (step == null) continue; // etapa desconhecida (versão futura)
+      result[step] = (entry.value as List<dynamic>)
+          .map((g) => CollimationGuide.fromJson(g as Map<String, dynamic>))
+          .toList();
+    }
+    return result;
+  }
 }

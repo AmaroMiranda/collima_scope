@@ -45,13 +45,15 @@ class AdapterListScreen extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   leading: Icon(
-                    a.isValidated ? Icons.verified : Icons.smartphone,
-                    color: a.isValidated ? scheme.secondary : null,
+                    a.isValidated ? Icons.tune : Icons.smartphone,
+                    // Amarelo = alinhamento manual; verde fica reservado para
+                    // calibração medida (ainda não implementada).
+                    color: a.isValidated ? scheme.tertiary : null,
                   ),
                   title: Text(a.name),
                   subtitle: Text(
-                      '${a.phoneMountType.label} · Focador ${a.focuserSize.label}'
-                      '${a.isValidated ? ' · Validado' : ' · Não validado'}'),
+                      '${a.phoneMountType.label} · Focalizador ${a.focuserSize.label}'
+                      '${a.isValidated ? ' · Alinhado manualmente' : ' · Não alinhado'}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/adapters/edit?id=${a.id}'),
                 ),

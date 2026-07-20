@@ -104,7 +104,7 @@ class GuideScreen extends StatelessWidget {
                       'câmera do celular — não um colimador automático '
                       'perfeito. A precisão final depende do preview sem '
                       'distorção, dos círculos de referência e do '
-                      'alinhamento físico do celular ao focador.',
+                      'alinhamento físico do celular ao focalizador.',
                     ),
                   ),
                 ],

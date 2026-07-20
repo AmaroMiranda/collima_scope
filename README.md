@@ -2,11 +2,12 @@
 
 **Colimação de telescópios Newtonianos e Dobsonianos com a câmera do celular.**
 
-O CollimaScope transforma o celular em um ocular de colimação assistida:
-a câmera olha pelo focador e o app desenha, por cima do preview ao vivo,
+O CollimaScope é um assistente visual com guias ajustáveis para auxiliar o
+aprendizado e a inspeção aproximada da colimação: a câmera olha pelo
+focalizador e o app desenha, por cima da imagem ao vivo,
 círculos de referência geometricamente perfeitos, mira central, marcadores
-de parafusos e grade — guiando um fluxo de 7 etapas que vai da calibração
-do preview até a validação em estrela. Tudo offline, sem conta, sem
+de parafusos e grade — guiando um fluxo de 7 etapas que vai da verificação da
+imagem da câmera até a validação em estrela. Tudo offline, sem conta, sem
 rastreamento e com uma única permissão: a câmera.
 
 **[⬇️ Baixar o APK (Releases)](https://github.com/AmaroMiranda/collima_scope/releases)** —
@@ -24,10 +25,10 @@ requer Android 7+ e câmera traseira.
 - **Editor de guias em painel compacto** — chips para selecionar qualquer
   guia da etapa, sliders de raio/espessura/opacidade, 6 cores predefinidas,
   travar/ocultar/centralizar/duplicar/excluir — sem cobrir o preview.
-- **Modo avançado** — quem já tem o adaptador calibrado pula direto para a
-  colimação; um seletor de etapas permite saltar para qualquer estágio a
+- **Modo avançado** — quem já tem o adaptador alinhado pode iniciar sem as
+  verificações iniciais (com aviso claro de perda de precisão); um seletor de etapas permite saltar para qualquer estágio a
   qualquer momento.
-- **Perfis de equipamento** — telescópios (abertura, focal, focador 1,25"/2",
+- **Perfis de equipamento** — telescópios (abertura, focal, focalizador 1,25"/2",
   marca central, nº de parafusos, offset do secundário) e adaptadores de
   celular ficam salvos para reuso entre sessões.
 - **Histórico com antes/depois** — cada sessão registra capturas por etapa;
@@ -40,18 +41,18 @@ requer Android 7+ e câmera traseira.
 
 | # | Etapa | Objetivo |
 |---|---|---|
-| 1 | Calibração do preview | Confirmar que o preview não está deformado: um círculo de teste deve parecer redondo em pé e deitado |
-| 2 | Calibração do adaptador | Alinhar a câmera do celular com o eixo do focador e salvar o perfil do adaptador |
-| 3 | Centralizar no focador | Fazer o círculo-guia coincidir com a borda interna do tubo do focador |
-| 4 | Verificar secundário | Posicionar o secundário sob o focador, respeitando a geometria (offset aparente é normal em alguns Newtonianos) |
-| 5 | Alinhar secundário → primário | Ajustar o secundário até o primário inteiro aparecer no círculo, com a marca central sobre a mira |
+| 1 | Verificar imagem da câmera | Identificar deformações visíveis: a borda circular de referência deve parecer regular em pé e deitado (não substitui calibração geométrica medida) |
+| 2 | Alinhar câmera ao focalizador | Reduzir deslocamento e inclinação da câmera em relação ao eixo do focalizador (alinhamento manual) |
+| 3 | Centralizar no focalizador | Fazer o círculo-guia coincidir com a borda interna do tubo do focalizador |
+| 4 | Posicionar o secundário | Posicionar o secundário sob o focalizador, respeitando a geometria (offset aparente é normal em alguns Newtonianos) |
+| 5 | Secundário → primário | Ajustar o secundário até o primário inteiro aparecer no círculo, com a marca central sobre a mira |
 | 6 | Ajustar primário | Colimar o primário até o reflexo da marca central coincidir com a mira, com anéis concêntricos e marcadores dos parafusos como referência |
 | 7 | Validação em estrela | Star test: estrela brilhante centralizada e desfocada deve mostrar anéis simétricos |
 
 O app é um assistente visual — ele não emite instruções ópticas do tipo
 "gire o parafuso X em Y graus". A precisão final vem do preview sem
 distorção, dos círculos de referência e do alinhamento físico do celular
-ao focador.
+ao focalizador.
 
 ## Como funciona
 
@@ -96,7 +97,7 @@ flutter build apk --release
 ```
 
 O emulador funciona para navegar na interface, mas a validação de verdade
-pede um aparelho real apontado para um focador — o preview da câmera é o
+pede um aparelho real apontado para um focalizador — o preview da câmera é o
 coração do app.
 
 ## Testes
@@ -154,7 +155,7 @@ análise de desalinhamento assistida, suporte a SCT/RC e refratores, iOS.
 
 **Preciso de um adaptador de celular?**
 Não é obrigatório para explorar o app, mas para colimar de verdade sim: a
-câmera precisa estar estável e centralizada no focador. Qualquer suporte
+câmera precisa estar estável e centralizada no focalizador. Qualquer suporte
 universal de ocular funciona.
 
 **O círculo de teste parece oval. E agora?**

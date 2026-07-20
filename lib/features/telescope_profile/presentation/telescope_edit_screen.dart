@@ -116,7 +116,7 @@ class _TelescopeEditScreenState extends ConsumerState<TelescopeEditScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              Text('Tamanho do focador',
+              Text('Tamanho do focalizador',
                   style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 6),
               SegmentedButton<FocuserSize>(

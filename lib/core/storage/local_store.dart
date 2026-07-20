@@ -54,7 +54,6 @@ class JsonListStore<T> {
 /// Preferências simples do app.
 class AppPrefs {
   static const _safetyAcceptedKey = 'safety_accepted';
-  static const _previewCalibratedKey = 'preview_calibrated';
   static const _redModeKey = 'red_mode';
   static const _lastTelescopeKey = 'last_telescope_id';
   static const _lastAdapterKey = 'last_adapter_id';
@@ -67,13 +66,9 @@ class AppPrefs {
       (await SharedPreferences.getInstance())
           .setBool(_safetyAcceptedKey, value);
 
-  Future<bool> getPreviewCalibrated() async =>
-      (await SharedPreferences.getInstance()).getBool(_previewCalibratedKey) ??
-      false;
-
-  Future<void> setPreviewCalibrated(bool value) async =>
-      (await SharedPreferences.getInstance())
-          .setBool(_previewCalibratedKey, value);
+  // A antiga flag global "preview_calibrated" foi removida (auditoria P1.3):
+  // uma verificação visual não é uma calibração e não pode valer para sempre
+  // nem sobreviver a troca de aparelho/lente/zoom.
 
   Future<bool> getRedMode() async =>
       (await SharedPreferences.getInstance()).getBool(_redModeKey) ?? false;
