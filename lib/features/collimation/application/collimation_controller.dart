@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/geometry/point2d.dart';
 import '../../../core/storage/local_store.dart';
 import '../../adapter_profile/domain/adapter_profile.dart';
@@ -113,6 +114,13 @@ class CollimationController extends Notifier<CollimationState> {
         ),
       },
     );
+
+    // Lembra a última escolha (equipamento + modo) para a próxima sessão —
+    // quem já tem tudo configurado não deveria escolher de novo toda vez.
+    final prefs = ref.read(appPrefsProvider);
+    prefs.setLastTelescopeId(telescope.id);
+    prefs.setLastAdapterId(adapter?.id);
+    prefs.setPreferAdvancedMode(advancedMode);
   }
 
   void goToStep(CollimationStep step) {

@@ -445,7 +445,8 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _RoundIconButton(icon: Icons.close, onTap: onClose),
+        _RoundIconButton(
+            icon: Icons.close, onTap: onClose, tooltip: 'Fechar sessão'),
         const Spacer(),
         Material(
           color: Colors.black54,
@@ -471,7 +472,11 @@ class _TopBar extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        _RoundIconButton(icon: Icons.refresh, onTap: onReset),
+        _RoundIconButton(
+          icon: Icons.refresh,
+          onTap: onReset,
+          tooltip: 'Repor guias desta etapa',
+        ),
       ],
     );
   }
@@ -531,13 +536,18 @@ class _RoundIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool active;
+  final String? tooltip;
 
-  const _RoundIconButton(
-      {required this.icon, required this.onTap, this.active = false});
+  const _RoundIconButton({
+    required this.icon,
+    required this.onTap,
+    this.active = false,
+    this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final button = Material(
       color: active ? Colors.white24 : Colors.black54,
       shape: const CircleBorder(),
       child: InkWell(
@@ -549,6 +559,10 @@ class _RoundIconButton extends StatelessWidget {
         ),
       ),
     );
+    // Ícone sem texto ao lado precisa de rótulo acessível/descoberta por
+    // toque longo — botões destrutivos ou de significado não óbvio não
+    // podem depender só do desenho do ícone.
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
 
@@ -764,11 +778,21 @@ class _BottomPanelState extends State<_BottomPanel> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _RoundIconButton(
-                  icon: widget.frozen ? Icons.play_arrow : Icons.pause,
-                  onTap: widget.onFreeze),
+                icon: widget.frozen ? Icons.play_arrow : Icons.pause,
+                onTap: widget.onFreeze,
+                tooltip:
+                    widget.frozen ? 'Retomar câmera' : 'Congelar imagem',
+              ),
               _RoundIconButton(
-                  icon: Icons.add_circle_outline, onTap: widget.onAddCircle),
-              _RoundIconButton(icon: Icons.tune, onTap: widget.onEditCircles),
+                icon: Icons.add_circle_outline,
+                onTap: widget.onAddCircle,
+                tooltip: 'Adicionar círculo',
+              ),
+              _RoundIconButton(
+                icon: Icons.tune,
+                onTap: widget.onEditCircles,
+                tooltip: 'Editar guias',
+              ),
               GestureDetector(
                 onTap: widget.onCapture,
                 child: Container(
@@ -832,6 +856,7 @@ class _TorchButtonState extends State<_TorchButton> {
     return _RoundIconButton(
       icon: _on ? Icons.flash_on : Icons.flash_off,
       active: _on,
+      tooltip: _on ? 'Desligar lanterna' : 'Ligar lanterna',
       onTap: () {
         setState(() => _on = !_on);
         widget.onTorch(_on);

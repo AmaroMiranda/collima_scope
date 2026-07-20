@@ -57,6 +57,7 @@ class AppPrefs {
   static const _redModeKey = 'red_mode';
   static const _lastTelescopeKey = 'last_telescope_id';
   static const _lastAdapterKey = 'last_adapter_id';
+  static const _preferAdvancedModeKey = 'prefer_advanced_mode';
 
   Future<bool> getSafetyAccepted() async =>
       (await SharedPreferences.getInstance()).getBool(_safetyAcceptedKey) ??
@@ -93,6 +94,19 @@ class AppPrefs {
       await prefs.setString(_lastAdapterKey, id);
     }
   }
+
+  /// Se a última sessão foi iniciada em "Opções avançadas" (sem
+  /// verificações), abre esse painel já expandido na próxima vez — quem
+  /// sempre pula a verificação não deveria precisar reabrir o painel toda
+  /// sessão. A ação de iniciar continua exigindo um toque explícito.
+  Future<bool> getPreferAdvancedMode() async =>
+      (await SharedPreferences.getInstance())
+          .getBool(_preferAdvancedModeKey) ??
+      false;
+
+  Future<void> setPreferAdvancedMode(bool value) async =>
+      (await SharedPreferences.getInstance())
+          .setBool(_preferAdvancedModeKey, value);
 }
 
 String newId() =>
